@@ -25,3 +25,15 @@ Run the program with -h for the available options. You can configure the databas
 ## Config file
 
 See the sample.cfg   
+
+## Author & Copyright
+
+Dimitar Kunchev
+
+## License
+
+This extension is licensed under the MIT License - see the `LICENSE` file for details
+
+## Contributing
+
+Pull requests and issues are more than welcome.
