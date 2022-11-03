@@ -20,6 +20,8 @@ Options:\n\
 \n\
 You must either specify a config file with '-f config' or provide server dsb, database\n\
 name collection name with the respective options\n\
+If you specify the options as '-f file -t tag' the tag will override the specified in the\n\
+file. Same applies to -s, -d and -c.\n\
 ");
 }
 
@@ -29,7 +31,6 @@ int main (int argc, char *argv[]) {
 	char * collection_name = NULL;
 	char * tag = NULL;
 	char * config_file_name = NULL;
-	config_t config_file;
 
 	int opt;
 	while ((opt = getopt(argc, argv, "hf:s:d:c:t:")) != 1) {
@@ -38,9 +39,48 @@ int main (int argc, char *argv[]) {
 				print_usage();
 				exit(EXIT_SUCCESS);
 				break;
-			case 'f':
-				config_file_name = optarg;
+			case 'f': {
+				// printf("Reading config file %s\n", optarg);
+				config_t config_file;
+				config_init(&config_file);
+				char * tmp;
+				int error = 0;
+				if (!config_read_file(&config_file, optarg)) {
+					fprintf(stderr, "%s:%d - %s\n", config_error_file(&config_file), config_error_line(&config_file), config_error_text(&config_file));
+					error = 1;
+				}
+
+				if (dbdsn == NULL) {
+					if(!error && !config_lookup_string(&config_file, "dsn", (const char **)&tmp)) {
+						fprintf(stderr, "No DSN specified in config file");
+						error = 1;
+					}
+					dbdsn = strdup(tmp);
+				}
+
+				if (database_name == NULL) {
+					if(!error && !config_lookup_string(&config_file, "db", (const char **)&tmp)) {
+						fprintf(stderr, "No db specified in config file");
+						error =1;
+					}
+					database_name = strdup(tmp);
+				}
+
+				if (collection_name == NULL) {
+					if(!error && !config_lookup_string(&config_file, "collection", (const char **)&tmp)) {
+						fprintf(stderr, "No collection specified in config file");
+						error =1;
+					}
+					collection_name = strdup(tmp);
+				}
+
+				config_destroy(&config_file);
+				if (error > 0) {
+					exit(EXIT_FAILURE);
+				}
+
 				break;
+			}
 			case 's':
 				dbdsn = optarg;
 				break;
@@ -64,57 +104,31 @@ int main (int argc, char *argv[]) {
 		}
 	}
 
-	if (config_file_name != NULL) {
-		printf("Reading config file %s\n", config_file_name);
-		config_init(&config_file);
-		char * tmp;
-		int error = 0;
-		if (!config_read_file(&config_file, config_file_name)) {
-			fprintf(stderr, "%s:%d - %s\n", config_error_file(&config_file), config_error_line(&config_file), config_error_text(&config_file));
-			error = 1;
-		}
-		if(!error && !config_lookup_string(&config_file, "dsn", (const char **)&tmp)) {
-			fprintf(stderr, "No DSN specified in config file");
-			error = 1;
-		}
-		dbdsn = strdup(tmp);
-		if(!error && !config_lookup_string(&config_file, "db", (const char **)&tmp)) {
-			fprintf(stderr, "No db specified in config file");
-			error =1;
-		}
-		database_name = strdup(tmp);
-		if(!error && !config_lookup_string(&config_file, "collection", (const char **)&tmp)) {
-			fprintf(stderr, "No collection specified in config file");
-			error =1;
-		}
-		collection_name = strdup(tmp);
-		config_destroy(&config_file);
-		if (error > 0) {
-			exit(EXIT_FAILURE);
-		} else {
-			printf("Config file read\n");
-		}
-	} else {
-		if (dbdsn == NULL) {
-			fprintf(stderr, "No DSN specified\n");
-			print_usage();
-			exit(EXIT_FAILURE);
-		}
-		if (database_name == NULL) {
-			fprintf(stderr, "No database name specified");
-			print_usage();
-			exit(EXIT_FAILURE);
-		}
-		if (collection_name == NULL) {
-			fprintf(stderr, "No collection name specified\n");
-			print_usage();
-			exit(EXIT_FAILURE);
-		}
+	if (argv[optind] != NULL) {
+		fprintf(stderr, "Unknown argument %s\n", argv[optind]);
+		print_usage();
+		exit(EXIT_FAILURE);
 	}
 
-	mongoc_database_t *database;
-	mongoc_client_t *client;
-	mongoc_collection_t *collection;
+	if (dbdsn == NULL) {
+		fprintf(stderr, "No DSN specified\n");
+		print_usage();
+		exit(EXIT_FAILURE);
+	}
+	if (database_name == NULL) {
+		fprintf(stderr, "No database name specified");
+		print_usage();
+		exit(EXIT_FAILURE);
+	}
+	if (collection_name == NULL) {
+		fprintf(stderr, "No collection name specified\n");
+		print_usage();
+		exit(EXIT_FAILURE);
+	}
+
+	mongoc_database_t *database = NULL;
+	mongoc_client_t *client = NULL;
+	mongoc_collection_t *collection = NULL;
 
 	mongoc_init ();
 
@@ -143,7 +157,7 @@ int main (int argc, char *argv[]) {
 
 	bson_error_t error;
 	bson_oid_t oid;
-	bson_t *doc;
+	bson_t *doc = NULL;
 	while (!feof(stdin)) {
 		if ((nread = getline(&line, &len, stdin)) > 1) {
 			doc = bson_new ();

@@ -1,7 +1,7 @@
 project(MongoLogPipe)
 find_package(PkgConfig REQUIRED)
 
-cmake_minimum_required(VERSION 3.18)
+cmake_minimum_required(VERSION 3.13)
 
 add_executable(mongoLogPipe mongoLogPipe.c)
 
